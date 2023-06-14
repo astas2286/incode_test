@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import User from "../models/User";
+import {updateUserRole} from "../utils/updateUser";
 
 interface UserIdRequest extends Request {
   userId?: string;
@@ -12,32 +13,33 @@ export const registerUser = async (req: UserIdRequest, res: Response) => {
   try {
     const { username, password, role, bossId } = req.body;
 
-    let newBossId = ''
-
+    let newBossId = "";
     const admin = await User.findOne({ role: "Administrator" });
+    let boss = await User.findById(bossId);
 
     if (admin && role === "Administrator") {
-      return res.status(400).json({ message: "Only one admin can be present" });
+      return res
+        .status(400)
+        .json({ message: "Only one admin can be presented" });
     }
 
     // Check if boss exists (for non-administrator users)
     if (role !== "Administrator") {
-      let boss = await User.findById(bossId);
-
-      if (boss?.role === "Regular") {
-        return res
-          .status(400)
-          .json({ message: "Regular user can`t have subordinates" });
-      }
-
-
-      // if you trying to signup boss, his boss auomaticly change to admin
-      if (boss?.role === "Boss") {
-        newBossId = admin?.id;
-      }
-
-      if (!boss) {
+      if (!boss && role !== "Boss") {
         return res.status(400).json({ message: "Boss not found" });
+      }
+
+      // If you add Regular1 to Regular2, then Regular2 became a Boss and subordinates to Administrator
+      if (boss?.role === "Regular") {
+        const updatedUser = await User.findByIdAndUpdate(
+          boss._id,
+          { role: "Boss", boss: admin?.id },
+          { new: true }
+        );
+
+        if (!updatedUser) {
+          return res.status(404).json({ message: "User not found" });
+        }
       }
     }
 
@@ -45,19 +47,22 @@ export const registerUser = async (req: UserIdRequest, res: Response) => {
     const user = new User({
       username,
       password: await bcrypt.hash(password, 10),
-      role,
-      boss: newBossId,
+      role: role === "Boss" ? "Regular" : role,
+      boss: newBossId || bossId,
     });
 
     await user.save();
 
-    // to hide password
+    // To hide password
     const userResponse = {
-        ...user.toObject(),
-        password: undefined,
-      };
+      ...user.toObject(),
+      password: undefined,
+    };
 
-    res.status(201).json({ userResponse, message: "User registered successfully" });
+    res
+      .status(201)
+      .json({ userResponse, 
+        message: "User registered successfully. You can't become a Boss right away, you need someone to attach a Regular to you, so you are starting as a Regular" });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Internal server error" });
@@ -114,35 +119,62 @@ export const getUsers = async (req: UserIdRequest, res: Response) => {
 
 // Change user's boss
 export const changeUserBoss = async (req: UserIdRequest, res: Response) => {
+  const admin = await User.findOne({ role: "Administrator" });
+
   try {
-    const { userId } = req.params;
-    const { bossId } = req.body;
+    const { newBossId, regularId } = req.body;
+    const { userId } = req;
+    const oldBoss = await User.findById(userId);
 
-    const user = await User.findById(userId);
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    if (user.role !== "Boss") {
+    // Checking access rights to change the manager
+    if (oldBoss?.role !== "Boss") {
       return res
         .status(403)
-        .json({ message: "Only a boss can change the boss of a user" });
+        .json({ success: false, message: "Please login as Boss" });
     }
 
-    const subordinate = await User.findById(bossId);
+    // Checking for a user with the specified regularId
+    const regular = await User.findById(regularId);
 
-    if (!subordinate || subordinate.boss.toString() !== userId) {
-      return res.status(400).json({ message: "Invalid subordinate" });
+    if (!regular) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Regular user not found" });
     }
 
-    subordinate.boss = user.boss;
+    const isSubordinates = regular.boss.equals(oldBoss?._id);
 
-    await subordinate.save();
+    if (!isSubordinates) {
+      return res
+        .status(404)
+        .json({ success: false, message: "This user does not belong to you" });
+    }
 
-    res.status(200).json({ message: "User boss changed successfully" });
+    // Checking for a new boss with the specified newBossId
+    const newBoss = await User.findById(newBossId);
+    if (!newBoss) {
+      return res
+        .status(404)
+        .json({ success: false, message: "No new Boss has been found" });
+    }
+
+    // Update the user's bossId field & saving regular
+    regular.boss = newBossId;
+    await regular.save();
+    
+    const regularOldCount = (await User.find({ boss: userId })).length;
+    updateUserRole(regularOldCount, userId, newBossId, admin?._id)
+    
+    const regularNewCount = (await User.find({ boss: newBossId })).length;
+    updateUserRole(regularNewCount, newBossId, userId, admin?._id)
+
+    res.status(200).json({
+      regular,
+      success: true,
+      message: "The Boss has been successfully replaced",
+    });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
 };

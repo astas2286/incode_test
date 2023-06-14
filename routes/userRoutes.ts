@@ -12,6 +12,6 @@ const router = express.Router();
 router.post('/register', registerUser);
 router.post('/authenticate', authenticateUser);
 router.get('/users', protect, getUsers);
-router.patch('/users/:userId/change-boss', protect, changeUserBoss);
+router.patch('/users/change-boss', protect, changeUserBoss);
 
 export default router;
