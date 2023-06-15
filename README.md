@@ -66,15 +66,10 @@ $  npm  install
 ```plaintext
 
 PORT=3000
-
-MONGODB_URI=mongodb://localhost:27017/user-management-db
-
-JWT_SECRET=yourSecretKey
+MONGODB_URI=mongodb+srv://astas2286:RqwxZU74sH6r8BLX@cluster0.icttpjm.mongodb.net/Incode_users?retryWrites=true&w=majority
+JWT_SECRET=glory_to_Ukraine_Glory_to_the_Heroes
 
 ```
-
-The project has my `.env' file, you can use it freely or create your own.
-
   
 
 4. Start the application:
