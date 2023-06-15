@@ -23,6 +23,3 @@ const protect = (req, res, next) => {
     }
 };
 exports.protect = protect;
-// export const protect = (req: UserIdRequest, res: Response, next: NextFunction) => {
-// console.log('fff');
-// }

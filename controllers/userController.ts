@@ -25,6 +25,12 @@ export const registerUser = async (req: UserIdRequest, res: Response) => {
 
     // Check if boss exists (for non-administrator users)
     if (role !== "Administrator") {
+      if (!admin){
+        return res
+        .status(400)
+        .json({ message: "Please add an Admin first" });
+      }
+      
       if (!boss && role !== "Boss") {
         return res.status(400).json({ message: "Boss not found" });
       }
@@ -48,7 +54,7 @@ export const registerUser = async (req: UserIdRequest, res: Response) => {
       username,
       password: await bcrypt.hash(password, 10),
       role: role === "Boss" ? "Regular" : role,
-      boss: newBossId || bossId,
+      boss: role === "Administrator" ? null : (newBossId || bossId),
     });
 
     await user.save();
@@ -62,7 +68,7 @@ export const registerUser = async (req: UserIdRequest, res: Response) => {
     res
       .status(201)
       .json({ userResponse, 
-        message: "User registered successfully. You can't become a Boss right away, you need someone to attach a Regular to you, so you are starting as a Regular" });
+        message: "User registered successfully. You can't become a Boss right away, you need someone to attach a Regular to you." });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Internal server error" });
